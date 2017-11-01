@@ -7,6 +7,7 @@ import (
 	//"fmt"
 	"log"
 	//"os"
+	"regexp"
 )
 
 func hexToB64(hs string) string {
@@ -22,6 +23,20 @@ func hexToB64(hs string) string {
 	return buf.String()
 }
 
+func XOR(a, b []byte) []byte {
+	if len(a) != len(b) {
+		log.Fatal("can't xor unequal length strings, pad")
+	}
+
+	l := len(a)
+	dest := make([]byte, l, l)
+
+	for i := 0; i < l; i++ {
+		dest[i] = a[i] ^ b[i]
+	}
+
+	return dest
+}
 func hexXOR(a, b string) string {
 	if len(a) != len(b) {
 		log.Fatal("can't xor unequal length strings, pad")
@@ -37,12 +52,72 @@ func hexXOR(a, b string) string {
 		log.Fatal(err)
 	}
 
-	l := len(ba)
-	dest := make([]byte, l, l)
+	return hex.EncodeToString(XOR(ba, bb))
+}
+
+func singleByteXOR(char byte, test []byte) []byte {
+	l := len(test)
+	a := make([]byte, l, l)
 
 	for i := 0; i < l; i++ {
-		dest[i] = ba[i] ^ bb[i]
+		a[i] = char
 	}
 
-	return hex.EncodeToString(dest)
+	return XOR(a, test)
+}
+
+func scoreText(s []byte) int {
+	// are there any non-printable bytes?
+	match, err := regexp.Match("[\\x00-\\x1F\\x7F-\\xFF]", s)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// if so, return 0
+	if match {
+		return 0
+	}
+
+	freq := []byte("ETAOINSHRDLUetaoinshrdlu")
+	commonLetters := make(map[byte]bool)
+
+	for i := 0; i < len(freq); i++ {
+		commonLetters[freq[i]] = true
+	}
+
+	infreq := []byte("`'")
+	uncommonLetters := make(map[byte]bool)
+
+	for i := 0; i < len(infreq); i++ {
+		uncommonLetters[infreq[i]] = true
+	}
+
+	score := 0
+	for i := 0; i < len(s); i++ {
+		if _, ok := commonLetters[s[i]]; ok {
+			score++
+		} else if _, ok := uncommonLetters[s[i]]; ok {
+			score--
+		}
+	}
+
+	return score
+}
+
+func bruteSingleByteXOR(s []byte) string {
+	max := 0
+	bestCandidate := make([]byte, len(s), len(s))
+
+	for i := 0; i < 256; i++ {
+		candidate := singleByteXOR(byte(i), s)
+		score := scoreText(candidate)
+
+		if score > max {
+			//fmt.Printf("%v: %s\n", score, candidate)
+			max = score
+			bestCandidate = candidate
+		}
+	}
+
+	return string(bestCandidate[:])
 }
