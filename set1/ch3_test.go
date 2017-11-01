@@ -12,6 +12,7 @@ func ExampleBruteSingleByteXOR() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(bruteSingleByteXOR(encb))
+	_, dec := bruteSingleByteXOR(encb)
+	fmt.Printf("%s\n", dec)
 	// Output: Cooking MC's like a pound of bacon
 }

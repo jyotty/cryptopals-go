@@ -1,12 +1,13 @@
 package set1
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	//"fmt"
 	"log"
-	//"os"
+	"os"
 	"regexp"
 )
 
@@ -68,7 +69,7 @@ func singleByteXOR(char byte, test []byte) []byte {
 
 func scoreText(s []byte) int {
 	// are there any non-printable bytes?
-	match, err := regexp.Match("[\\x00-\\x1F\\x7F-\\xFF]", s)
+	match, err := regexp.Match("[^[:print:][:space:]]", s)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,7 +79,7 @@ func scoreText(s []byte) int {
 		return 0
 	}
 
-	freq := []byte("ETAOINSHRDLUetaoinshrdlu")
+	freq := []byte("ETAOINSHRDLUetaoinshrdlu ")
 	commonLetters := make(map[byte]bool)
 
 	for i := 0; i < len(freq); i++ {
@@ -104,7 +105,7 @@ func scoreText(s []byte) int {
 	return score
 }
 
-func bruteSingleByteXOR(s []byte) string {
+func bruteSingleByteXOR(s []byte) (int, []byte) {
 	max := 0
 	bestCandidate := make([]byte, len(s), len(s))
 
@@ -113,11 +114,43 @@ func bruteSingleByteXOR(s []byte) string {
 		score := scoreText(candidate)
 
 		if score > max {
-			//fmt.Printf("%v: %s\n", score, candidate)
+			//fmt.Fprintf(os.Stderr, "%v: %s\n", score, candidate)
 			max = score
 			bestCandidate = candidate
 		}
 	}
 
-	return string(bestCandidate[:])
+	return max, bestCandidate
+}
+
+func bruteForceLines(filename string) []byte {
+	handle, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer handle.Close()
+
+	var lines [][]byte
+	scanner := bufio.NewScanner(handle)
+	for scanner.Scan() {
+		encb, err := hex.DecodeString(scanner.Text())
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		lines = append(lines, encb)
+	}
+
+	max := 0
+	bestCandidate := make([]byte, len(lines[0]), len(lines[0]))
+
+	for _, line := range lines {
+		score, dec := bruteSingleByteXOR(line)
+
+		if score > max {
+			max = score
+			bestCandidate = dec
+		}
+	}
+	return bestCandidate
 }
