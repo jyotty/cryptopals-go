@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
-	//"fmt"
+	//	"fmt"
 	"log"
 	"os"
 	"regexp"
@@ -153,4 +153,16 @@ func bruteForceLines(filename string) []byte {
 		}
 	}
 	return bestCandidate
+}
+
+func encodeRepeatingKeyXOR(key string, text string) []byte {
+	textb := []byte(text)
+	keyb := []byte(key)
+
+	// assume we aren't dealing with gigs of text here
+	textlen := len(textb)
+	repeat := (textlen / len(keyb)) + 1 // one more than needed...
+
+	fullkey := bytes.Repeat(keyb, repeat)
+	return XOR(fullkey[:textlen], textb) // ... then sliced off
 }
