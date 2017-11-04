@@ -5,10 +5,13 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
-	//	"fmt"
+	"fmt"
+	"io/ioutil"
 	"log"
+	"math/bits"
 	"os"
 	"regexp"
+	"sort"
 )
 
 func hexToB64(hs string) string {
@@ -165,4 +168,74 @@ func encodeRepeatingKeyXOR(key string, text string) []byte {
 
 	fullkey := bytes.Repeat(keyb, repeat)
 	return XOR(fullkey[:textlen], textb) // ... then sliced off
+}
+
+func hamming_distance(a, b []byte) int {
+	val := XOR(a, b)
+	sum := 0
+	for _, bt := range val {
+		sum += bits.OnesCount8(bt)
+	}
+	return sum
+}
+
+func readB64File(filename string) []byte {
+	handle, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer handle.Close()
+	b, err := ioutil.ReadAll(handle)
+	if err != nil {
+		log.Fatal(err)
+	}
+	decoded := make([]byte, len(b))
+	declen, err := base64.StdEncoding.Decode(decoded, b)
+	if err != nil {
+		log.Fatal(declen, err)
+	}
+	return decoded
+}
+
+func findProbableKeyLengths(encoded_blob []byte) []int {
+	type score struct {
+		Keylen int
+		Value  float64
+	}
+
+	var ham_scores []score
+	for length := 2; length <= 40; length++ {
+		sample_dist := 0
+		for i := 0; i < 3; i++ {
+			sample_a := encoded_blob[i:(i + length)]
+			sample_b := encoded_blob[(i + length):(i + length*2)]
+
+			sample_dist += hamming_distance(sample_a, sample_b)
+		}
+
+		ham_scores = append(ham_scores, score{length, float64(sample_dist) / 3.0 / float64(length)})
+	}
+
+	sort.Slice(ham_scores, func(i, j int) bool {
+		return ham_scores[i].Value < ham_scores[j].Value
+	})
+
+	fmt.Fprintln(os.Stderr, ham_scores)
+
+	var probable_keylengths []int
+	for i, score := range ham_scores {
+		probable_keylengths = append(probable_keylengths, score.Keylen)
+		if i >= 4 {
+			break
+		}
+	}
+
+	return probable_keylengths
+}
+
+func bruteForceRKXOR(filename string) []byte {
+	encoded_blob := readB64File(filename)
+	probable_keylengths := findProbableKeyLengths(encoded_blob)
+	fmt.Fprintln(os.Stderr, probable_keylengths)
+	return []byte("dongs")
 }
