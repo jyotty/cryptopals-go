@@ -89,7 +89,7 @@ func scoreText(s []byte) int {
 		commonLetters[freq[i]] = true
 	}
 
-	infreq := []byte("`'")
+	infreq := []byte("`'~@")
 	uncommonLetters := make(map[byte]bool)
 
 	for i := 0; i < len(infreq); i++ {
@@ -98,7 +98,9 @@ func scoreText(s []byte) int {
 
 	score := 0
 	for i := 0; i < len(s); i++ {
-		if _, ok := commonLetters[s[i]]; ok {
+		if s[i] == 0x0D {
+			return 0
+		} else if _, ok := commonLetters[s[i]]; ok {
 			score++
 		} else if _, ok := uncommonLetters[s[i]]; ok {
 			score--
@@ -188,6 +190,8 @@ func readB64File(filename string) []byte {
 	}
 	decoded := make([]byte, len(b))
 	declen, err := base64.StdEncoding.Decode(decoded, b)
+	// hack: this is too big by 4/3, so
+	decoded = bytes.Trim(decoded, "\x00")
 	if err != nil {
 		log.Fatal(declen, err)
 	}
@@ -253,7 +257,6 @@ func BruteForceRKXOR(filename string) ([]byte, []byte, error) {
 				if score > top_score {
 					top_score = score
 					c = i
-					// fmt.Printf("%s %s:\n%s\n", keylength, c, result)
 				}
 			}
 			if c == 0 {
