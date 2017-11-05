@@ -158,16 +158,13 @@ func bruteForceLines(filename string) []byte {
 	return bestCandidate
 }
 
-func encodeRepeatingKeyXOR(key string, text string) []byte {
-	textb := []byte(text)
-	keyb := []byte(key)
-
+func encodeRepeatingKeyXOR(key []byte, text []byte) []byte {
 	// assume we aren't dealing with gigs of text here
-	textlen := len(textb)
-	repeat := (textlen / len(keyb)) + 1 // one more than needed...
+	textlen := len(text)
+	repeat := (textlen / len(key)) + 1 // one more than needed...
 
-	fullkey := bytes.Repeat(keyb, repeat)
-	return XOR(fullkey[:textlen], textb) // ... then sliced off
+	fullkey := bytes.Repeat(key, repeat)
+	return XOR(fullkey[:textlen], text) // ... then sliced off
 }
 
 func hamming_distance(a, b []byte) int {
@@ -206,14 +203,14 @@ func findProbableKeyLengths(encoded_blob []byte) []int {
 	var ham_scores []score
 	for length := 2; length <= 40; length++ {
 		sample_dist := 0
-		for i := 0; i < 3; i++ {
+		for i := 0; i < 3*length; i += length {
 			sample_a := encoded_blob[i:(i + length)]
 			sample_b := encoded_blob[(i + length):(i + length*2)]
 
 			sample_dist += hamming_distance(sample_a, sample_b)
 		}
 
-		ham_scores = append(ham_scores, score{length, float64(sample_dist) / 3.0 / float64(length)})
+		ham_scores = append(ham_scores, score{length, float64(sample_dist) / float64(length)})
 	}
 
 	sort.Slice(ham_scores, func(i, j int) bool {
@@ -233,9 +230,47 @@ func findProbableKeyLengths(encoded_blob []byte) []int {
 	return probable_keylengths
 }
 
-func bruteForceRKXOR(filename string) []byte {
+func BruteForceRKXOR(filename string) ([]byte, []byte, error) {
 	encoded_blob := readB64File(filename)
 	probable_keylengths := findProbableKeyLengths(encoded_blob)
 	fmt.Fprintln(os.Stderr, probable_keylengths)
-	return []byte("dongs")
+
+	for _, keylength := range probable_keylengths {
+		slices := make([][]byte, keylength)
+
+		for i := 0; i < len(encoded_blob); i++ {
+			slices[i%keylength] = append(slices[i%keylength], encoded_blob[i])
+		}
+
+		var probable_key bytes.Buffer
+		for _, slice := range slices {
+			top_score := 0
+			var c byte
+			for i := byte(0x20); i <= 0x7E; i++ {
+				mask := bytes.Repeat([]byte{i}, len(slice))
+				result := XOR(slice, mask)
+				score := scoreText(result)
+				if score > top_score {
+					top_score = score
+					c = i
+					// fmt.Printf("%s %s:\n%s\n", keylength, c, result)
+				}
+			}
+			if c == 0 {
+				continue
+			}
+			err := probable_key.WriteByte(c)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		if probable_key.Len() != keylength {
+			fmt.Fprintf(os.Stderr, "Found no suitable ASCII bytes to decode with key length %s\n", keylength)
+		} else {
+			key := probable_key.Bytes()
+			return key, encodeRepeatingKeyXOR(key, encoded_blob), nil
+		}
+	}
+
+	return nil, nil, fmt.Errorf("Found no suitable keys, tried lengths %s\n", probable_keylengths)
 }
